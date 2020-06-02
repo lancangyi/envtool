@@ -1,6 +1,7 @@
 # envtool
 Ｄescription:
   Shell script tool envtool is used in Chromium chroot ENV.
+
 Usage:
   ./envtool ${COMMAND} ${BOARD}
   1. ${COMMAND} must in COMMAND_LIST and ${BOARD} must in BOARD_LIST
