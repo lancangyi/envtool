@@ -1,0 +1,555 @@
+#!/bin/bash
+# Author: xiong.huang
+# First Version Time: 2020-05-27
+# Description:  1. built link
+#				2. emerge firmware
+#				3. flash firmware
+
+# support boards list. If have new chrome project, remeber to add
+# mother project at first colum and other sub project following row.  
+declare BOARD_LIST=(
+	'kukui kodama kakadu'
+	'jacuzzi damu'
+	'volteer malefor'
+	'zork dalboz'
+	'dedede wheelie'
+	'oak hana'
+	'coral'
+	'octopus phaser foob'
+	'grunt treeya nuwani'
+	'hatch akemi'
+)
+
+declare MOTHER_BOARD=""
+declare BOARD=""
+declare COMMAND=""
+
+declare COMMAND_LIST=(
+	emerge_ec emerge_ec_handle
+	emerge_bios emerge_bios_handle
+	emerge_fw emerge_fw_handle
+	copy_ec copy_ec_handle
+	copy_bios copy_bios_handle
+	copy_fw copy_fw_handle
+	flash_ec flash_ec_handle
+	flash_bios flash_bios_handle
+	flash_fw flash_fw_handle
+	emerge_flash_ec emerge_flash_ec_handle
+	emerge_flash_bios emerge_flash_bios_handle
+	emerge_flash_fw emerge_flash_handle
+	env_build env_build_handle
+	git_reset git_reset_handle
+)
+
+function usage() {
+	printf 'Usage: %s <COMMAND> <BOARD>\n' $0
+	printf "** support COMMAND:"
+	len=${#COMMAND_LIST[@]}
+	for((i=0;i<len;i+=2))
+	do
+		printf '%s\n' "${COMMAND_LIST[i]}"
+	done
+	printf '\n'
+
+	printf "** support BOARD:"
+	for i in "${BOARD_LIST[@]}"
+	do
+		MOTHER_BOARD=${i}
+		for j in "${MOTHER_BOARD[@]}"
+		do
+			printf '%s ' "${j}"
+		done
+		printf '\n'
+	done
+}
+
+# Declare these asap so that code below can safely assume they exist.
+_message() {
+  local prefix=$1
+  shift
+  printf '%s: ' "$(date +%H:%M:%S)" >&2
+  if [[ $# -eq 0 ]]; then
+    echo -e "${prefix}${CROS_LOG_PREFIX:-""}:${V_VIDOFF}" >&2
+    return
+  fi
+  (
+    # Handle newlines in the message, prefixing each chunk correctly.
+    # Do this in a subshell to avoid having to track IFS/set -f state.
+    IFS="
+"
+    set +f
+    set -- $*
+    IFS=' '
+    if [[ $# -eq 0 ]]; then
+      # Empty line was requested.
+      set -- ''
+    fi
+    for line in "$@"; do
+      echo -e "${prefix}${CROS_LOG_PREFIX:-}: ${line}${V_VIDOFF}" >&2
+    done
+  )
+}
+
+info() {
+  _message "${V_BOLD_GREEN}INFO    " "$*"
+}
+
+warn() {
+  _message "${V_BOLD_YELLOW}WARNING " "$*"
+}
+
+error() {
+  _message "${V_BOLD_RED}ERROR   " "$*"
+}
+
+# Get current timestamp. Assumes common.sh runs at startup.
+start_time=$(date +%s)
+
+# Get time elapsed since start_time in seconds.
+_get_elapsed_seconds() {
+  local end_time=$(date +%s)
+  local elapsed_seconds=$(( end_time - start_time ))
+  echo ${elapsed_seconds}
+}
+
+# Print time elapsed since start_time.
+print_time_elapsed() {
+  # Optional first arg to specify elapsed_seconds.  If not given, will
+  # recalculate elapsed time to now.  Optional second arg to specify
+  # command name associated with elapsed time.
+  local elapsed_seconds=${1:-$(_get_elapsed_seconds)}
+  local cmd_base=${2:-}
+
+  local minutes=$(( elapsed_seconds / 60 ))
+  local seconds=$(( elapsed_seconds % 60 ))
+
+  if [[ -n ${cmd_base} ]]; then
+    info "Elapsed time (${cmd_base}): ${minutes}m${seconds}s"
+  else
+    info "Elapsed time: ${minutes}m${seconds}s"
+  fi
+}
+
+command_completed() {
+  # Call print_elapsed_time regardless.
+  local run_time=$(_get_elapsed_seconds)
+  local cmd_base=$(basename "$0")
+  print_time_elapsed ${run_time} ${cmd_base}
+}
+
+function check_in_chroot() {
+	# Detect whether we're inside a chroot or not
+	CHROOT_VERSION_FILE=/etc/cros_chroot_version
+	if [[ ! -e ${CHROOT_VERSION_FILE} ]]; then
+		warn "You're not in chroot and run 'cros_sdk --no-ns-pid' out chroot first"
+	 	exit 0
+	fi	
+}
+
+# check servod service
+function check_servod_service ()
+{	
+	# open servod service
+	case ${MOTHER_BOARD} in
+	octopus)
+	ps -fe | grep servod | grep -v grep
+	if [ $? -ne 0 ]; then
+		sudo servod -b ${MOTHER_BOARD}_npcx &
+		sleep 10
+	fi
+	;;
+
+	*)
+	ps -fe |grep servod | grep -v grep
+	if [ $? -ne 0 ]; then
+		sudo servod -b ${MOTHER_BOARD} &
+		sleep 10
+	fi
+	;;
+	esac
+
+	# exit if not find servod service
+	ps -fe |grep servod | grep -v grep
+	if [ $? -ne 0 ]; then
+		error "cannot find servod service, plese double check your servo board whether connect to PC with cable"
+		exit 0
+	fi
+}
+
+function check_board() {
+	# Shell一维数组和二维数组(https://www.jianshu.com/p/543fa9df3469)
+	for i in "${BOARD_LIST[@]}"
+	do
+		MOTHER_BOARD=(${i})
+		for j in "${MOTHER_BOARD[@]}"
+		do
+			if [ ${j} = ${BOARD} ]; then
+				# find board, then return directly and go on next step.
+				return 0
+			fi
+		done
+	done
+
+	# board you enterd not list in BOARD_LIST and exit
+	warn "please check your board(${BOARD}) whether in BOARD_LIST"
+	warn "if not, please update BOARD_LIST array in $0 script"
+
+	for i in "${BOARD_LIST[@]}"
+	do
+		MOTHER_BOARD=${i}
+		for j in "${MOTHER_BOARD[@]}"
+		do
+			printf '%s ' "${j}"
+		done
+		printf '\n'
+	done
+
+	return 1
+}
+
+function parse_params() {
+	if [ $# -ne 2 ]; then
+		return 1
+	fi
+
+	COMMAND=$1
+	BOARD=$2
+
+	return 0
+}
+
+function emerge_ec_handle() {
+	if [ -e /build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin ]; then
+		sudo rm -f /build/${MOTHER_BOARD}/firmware/${BOARD}/*
+	fi
+
+	case ${BOARD} in
+		*)
+			cros_workon-${MOTHER_BOARD} start chromeos-ec
+			FW_NAME=${BOARD} emerge-${MOTHER_BOARD} chromeos-ec
+			cros_workon-${MOTHER_BOARD} stop chromeos-ec
+		;;
+	esac
+}
+
+function emerge_bios_handle() {
+	if [ -e /build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin ]; then
+		sudo rm -f /build/${MOTHER_BOARD}/firmware/image-${BOARD}.*
+	fi
+
+	case ${BOARD} in
+		coral)
+		# build mrc first
+		emerge-${MOTHER_BOARD} chromeos-mrc --getbinpkg --binpkg-respect-use=n
+
+		# build the need files
+		emerge-${MOTHER_BOARD} coreboot-private-files coreboot-private-files-baseboard-${BOARD} nhlt-blobs
+
+		# start that we need build
+		cros_workon-${MOTHER_BOARD} start libpayload depthcharge coreboot 
+
+		# start building....
+		emerge-${MOTHER_BOARD} chromeos-seabios libpayload depthcharge coreboot chromeos-bootimage
+		# stop all
+		cros_workon-${MOTHER_BOARD} --all stop
+		;;
+		*)
+		cros_workon-volteer start coreboot depthcharge libpayload
+		FW_NAME=${BOARD} emerge-${MOTHER_BOARD} coreboot depthcharge libpayload chromeos-bootimage
+		cros_workon-kukui --all stop
+		;;
+	esac
+}
+
+function emerge_fw_handle() {
+	if [ -e /build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin ]; then
+		rm -f /build/${MOTHER_BOARD}/firmware/${BOARD}/*
+	fi
+
+	if [ -e /build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin ]; then
+		rm -f /build/${MOTHER_BOARD}/firmware/image-${BOARD}.*
+	fi
+
+	case ${BOARD} in
+		coral)
+		# build mrc first
+		emerge-${MOTHER_BOARD} chromeos-mrc --getbinpkg --binpkg-respect-use=n
+
+		# build the need files
+		emerge-${MOTHER_BOARD} coreboot-private-files coreboot-private-files-baseboard-${BOARD} nhlt-blobs
+
+		# start that we need build
+		cros_workon-${MOTHER_BOARD} start libpayload depthcharge coreboot 
+
+		# start building....
+		emerge-${MOTHER_BOARD} chromeos-seabios libpayload depthcharge coreboot chromeos-bootimage
+		# stop all
+		cros_workon-${MOTHER_BOARD} --all stop
+		;;
+		*)
+		cros_workon-volteer start chromeos-ec coreboot depthcharge libpayload
+		FW_NAME=${BOARD} emerge-${MOTHER_BOARD} chromeos-ec coreboot depthcharge libpayload chromeos-bootimage
+		cros_workon-kukui --all stop
+		;;
+	esac
+}
+
+function copy_ec_handle() {
+	if [ -f ~/trunk/firmware/${BOARD}/ec.bin ]; then
+        rm -r ~/trunk/firmware/${BOARD}/ec.bin
+    fi
+
+    ls -al ~/trunk/firmware/${BOARD}
+    
+    if [ -f /build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin ]; then
+        cp -r /build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin ~/trunk/firmware/${BOARD}
+    else
+        error "/build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin not 
+exist!!!"      
+    fi
+
+    echo
+    ls -al ~/trunk/firmware/${BOARD}
+}
+
+function copy_bios_handle() {
+	if [ -f ~/trunk/firmware/${BOARD}/image-${BOARD}.serial.bin ]; then
+        rm -r ~/trunk/firmware/${BOARD}/image-${BOARD}.serial.bin
+    fi
+    if [ -f ~/trunk/firmware/${BOARD}/image-${BOARD}.bin ]; then
+        rm -r ~/trunk/firmware/${BOARD}/image-${BOARD}.bin
+    fi
+
+    ls -al ~/trunk/firmware/${BOARD}
+    
+    if [ -f /build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin ]; then
+        cp -r /build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin  ~/trunk/firmware/${BOARD}
+        cp -r /build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin  ~/trunk/firmware/${BOARD}/bios.bin
+    else
+        error "/build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin not 
+exist!!!"      
+    fi
+
+    if [ -f /build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin ]; then
+        cp -r /build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin  ~/trunk/firmware/${BOARD}
+    else
+        error "/build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin not 
+exist!!!"      
+    fi
+
+    echo
+    ls -al ~/trunk/firmware/${BOARD}
+}
+
+function copy_fw_handle() {
+	rm -r ~/trunk/firmware/${BOARD}/*
+
+	if [ -f /build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin ]; then
+        cp -r /build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin ~/trunk/firmware/${BOARD}
+    else
+        error "/build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin not 
+exist!!!"      
+    fi
+
+    if [ -f /build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin ]; then
+        cp -r /build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin  ~/trunk/firmware/${BOARD}
+        cp -r /build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin  ~/trunk/firmware/${BOARD}/bios.bin
+    else
+        error "/build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin not 
+exist!!!"      
+    fi
+
+    if [ -f /build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin ]; then
+        cp -r /build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin  ~/trunk/firmware/${BOARD}
+    else
+        error "/build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin not 
+exist!!!"      
+    fi
+
+    ls -al ~/trunk/firmware/${BOARD}
+}
+
+
+function flash_ec_handle() {
+	check_servod_service
+
+	if [ ! -f ~/trunk/firmware/${BOARD}/ec.bin ]; then
+		error "~/trunk/firmware/${BOARD}/ec.bin not exist!!!"
+		exit 1
+	else
+		sudo /usr/bin/flash_ec --board=${MOTHER_BOARD} --image ~/trunk/firmware/${BOARD}/ec.bin
+	fi
+}
+
+function flash_bios_handle() {
+	check_servod_service
+
+	if [ ! -f ~/trunk/firmware/${BOARD}/bios.bin ]; then
+		error "~/trunk/firmware/${BOARD}/bios.bin not exist!!!"
+		exit 1
+	else
+		bios_bin_path=~/trunk/firmware/${BOARD}/bios.bin
+	fi
+
+	PORT=9999
+	serial="$(dut-control -p "${PORT}" serialname | cut -d: -f2)"
+	# if micro or ccd are run through v4, then getting the serial has a
+	# different dut-control command
+	if [[ $(dut-control -p "${PORT}" servo_type) == *"servo_v4_with_servo"* ]]
+	then
+    	serial="$(dut-control -p "${PORT}" servo_micro_serialname | cut -d: -f2)"
+	elif [[ $(dut-control -p "${PORT}" servo_type) == *"servo_v4_with_ccd_cr50"* ]]
+	then
+    	serial="$(dut-control -p "${PORT}" ccd_serialname | cut -d: -f2)"
+	fi
+
+	if [[ $(dut-control -p "${PORT}" servo_type) == *"servo_micro"* ]]
+	then
+		case ${BOARD} in
+		malefor | volteer)
+		dut-control cpu_fw_spi:on
+		sudo flashrom -n -V -p raiden_debug_spi:serial="${serial}" -w ${bios_bin_path}
+		dut-control cpu_fw_spi:off
+		;;
+		*)
+		dut-control -p "${PORT}" cold_reset:on spi2_vref:pp1800 spi2_buf_en:on
+		sudo flashrom -n -V -p raiden_debug_spi:serial="${serial}" -w ${bios_bin_path}
+		dut-control -p "${PORT}" cold_reset:off spi2_vref:off spi2_buf_en:off
+		;;
+		esac
+	elif [[ $(dut-control -p "${PORT}" servo_type) == *"servo_v2"* ]]
+	then
+		case ${BOARD} in
+		malefor | volteer)
+		echo "hx01...."
+		dut-control cpu_fw_spi:on
+		sudo flashrom -V -p ft2232_spi:type=servo-v2,serial="${serial}" -w ${bios_bin_path}
+		dut-control cpu_fw_spi:off
+		;;
+		*)
+   		dut-control -p "${PORT}" cold_reset:on spi2_buf_en:on spi2_vref:pp1800 spi2_buf_on_flex_en:on
+		sudo flashrom -V -p ft2232_spi:type=servo-v2,serial="${serial}" -w ${bios_bin_path}
+		dut-control -p "${PORT}" spi2_vref:off cold_reset:off spi2_buf_en:off spi2_buf_on_flex_en:off
+		;;
+		esac
+	else
+		# To detect suzy or v4 ccd
+   		sudo flashrom -n -p raiden_debug_spi:serial="${serial}",target=AP -w "$1" -V
+	fi
+
+	dut-control power_state:off
+	sleep 2
+	dut-control power_state:on
+}
+
+function flash_fw_handle() {
+	flash_ec_handle
+
+	flash_bios_handle
+}
+
+function emerge_flash_ec_handle() {
+	emerge_ec_handle
+
+	copy_ec_handle
+
+	flash_ec_handle
+}
+
+function emerge_flash_bios_handle() {
+	emerge_bios_handle
+
+	copy_bios_handle
+
+	flash_bios_handle
+}
+
+function emerge_flash_fw_handle() {
+	emerge_fw_handle
+
+	copy_fw_handle
+
+	flash_fw_handle
+}
+
+function env_build_handle() {
+	 if  [ ! -d ~/trunk/firmware/${BOARD} ]; then
+        mkdir -p ~/trunk/firmware/${BOARD} ~/trunk/firmware/${BOARD}
+        mkdir -p ~/trunk/firmware/${BOARD} ~/trunk/firmware/${BOARD}_bak
+        mkdir -p ~/trunk/firmware/${BOARD} ~/trunk/firmware/${BOARD}_lb_bak
+    fi
+
+    if  [ ! -d ~/trunk/image/${BOARD} ]; then
+        mkdir -p ~/trunk/image/${current_board_id}_test_image
+        mkdir -p ~/trunk/image/${current_board_id}_recovery_image
+        mkdir -p ~/trunk/image/${current_board_id}_lb_image
+        mkdir -p ~/trunk/image/${current_board_id}_factory_image
+    fi
+}
+
+function git_reset() {
+	cd ~/trunk/
+
+	echo "repo forall -c git reset --hard HEAD"
+	repo forall -c git reset --hard HEAD
+
+	echo "repo forall -c git clean -xfd"
+	repo forall -c git clean -xfd
+}
+
+function process_command() {
+	len=${#COMMAND_LIST[@]}
+	for((i=0;i<len;i+=2))
+	do
+		if [ ${COMMAND_LIST[i]} == ${COMMAND} ]; then
+			command_handle=${COMMAND_LIST[i+1]}
+			${command_handle}
+			
+			return 0
+		fi
+	done
+
+	# command not support
+	warn "command '${COMMAND}' not in COMMAND_LIST of $0"
+
+	for((i=0;i<len;i+=2))
+	do
+		printf '%s\n' "${COMMAND_LIST[i]}"
+	done
+
+	return 1
+}
+
+# Exit if any command fails.
+set -e
+
+# main process
+function main() {
+	# check chroot first, ensure run in chroot
+	check_in_chroot
+
+	# parse params
+	if ! parse_params "$@"; then
+		usage "$@"
+		exit 0
+	fi
+
+	# check board in BOARD_LIST
+	if check_board "$@"; then
+		info "find board '${BOARD}', which mother board is '${MOTHER_BOARD}'"
+	else
+		exit 0
+	fi
+
+	# parse comamnd
+	if process_command "$@"; then
+		info "Done"
+	else
+		exit 0
+	fi
+
+	# record done time
+	command_completed
+}
+
+main "$@"
