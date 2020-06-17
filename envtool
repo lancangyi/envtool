@@ -44,6 +44,7 @@ declare COMMAND_LIST=(
 function usage() {
 	printf 'Usage: %s <COMMAND> <BOARD>\n' $0
 	printf "** support COMMAND:"
+
 	len=${#COMMAND_LIST[@]}
 	for((i=0;i<len;i+=2))
 	do
@@ -65,41 +66,41 @@ function usage() {
 
 # Declare these asap so that code below can safely assume they exist.
 _message() {
-  local prefix=$1
-  shift
-  printf '%s: ' "$(date +%H:%M:%S)" >&2
-  if [[ $# -eq 0 ]]; then
-    echo -e "${prefix}${CROS_LOG_PREFIX:-""}:${V_VIDOFF}" >&2
-    return
-  fi
-  (
-    # Handle newlines in the message, prefixing each chunk correctly.
-    # Do this in a subshell to avoid having to track IFS/set -f state.
-    IFS="
-"
-    set +f
-    set -- $*
-    IFS=' '
-    if [[ $# -eq 0 ]]; then
-      # Empty line was requested.
-      set -- ''
-    fi
-    for line in "$@"; do
-      echo -e "${prefix}${CROS_LOG_PREFIX:-}: ${line}${V_VIDOFF}" >&2
-    done
-  )
+	local prefix=$1
+	shift
+	printf '%s: ' "$(date +%H:%M:%S)" >&2
+	if [[ $# -eq 0 ]]; then
+		echo -e "${prefix}${CROS_LOG_PREFIX:-""}:${V_VIDOFF}" >&2
+    	return
+  	fi
+  	(
+	# Handle newlines in the message, prefixing each chunk correctly.
+	# Do this in a subshell to avoid having to track IFS/set -f state.
+    	IFS="
+	"
+	set +f
+	set -- $*
+	IFS=' '
+	if [[ $# -eq 0 ]]; then
+		# Empty line was requested.
+      		set -- ''
+    	fi
+ 	for line in "$@"; do
+		echo -e "${prefix}${CROS_LOG_PREFIX:-}: ${line}${V_VIDOFF}" >&2
+	done
+	)
 }
 
 info() {
-  _message "${V_BOLD_GREEN}INFO    " "$*"
+	_message "${V_BOLD_GREEN}INFO    " "$*"
 }
 
 warn() {
-  _message "${V_BOLD_YELLOW}WARNING " "$*"
+	_message "${V_BOLD_YELLOW}WARNING " "$*"
 }
 
 error() {
-  _message "${V_BOLD_RED}ERROR   " "$*"
+	_message "${V_BOLD_RED}ERROR   " "$*"
 }
 
 # Get current timestamp. Assumes common.sh runs at startup.
@@ -107,34 +108,34 @@ start_time=$(date +%s)
 
 # Get time elapsed since start_time in seconds.
 _get_elapsed_seconds() {
-  local end_time=$(date +%s)
-  local elapsed_seconds=$(( end_time - start_time ))
-  echo ${elapsed_seconds}
+	local end_time=$(date +%s)
+	local elapsed_seconds=$(( end_time - start_time ))
+	echo ${elapsed_seconds}
 }
 
 # Print time elapsed since start_time.
 print_time_elapsed() {
-  # Optional first arg to specify elapsed_seconds.  If not given, will
-  # recalculate elapsed time to now.  Optional second arg to specify
-  # command name associated with elapsed time.
-  local elapsed_seconds=${1:-$(_get_elapsed_seconds)}
-  local cmd_base=${2:-}
+	# Optional first arg to specify elapsed_seconds.  If not given, will
+	# recalculate elapsed time to now.  Optional second arg to specify
+	# command name associated with elapsed time.
+	local elapsed_seconds=${1:-$(_get_elapsed_seconds)}
+	local cmd_base=${2:-}
 
-  local minutes=$(( elapsed_seconds / 60 ))
-  local seconds=$(( elapsed_seconds % 60 ))
+	local minutes=$(( elapsed_seconds / 60 ))
+	local seconds=$(( elapsed_seconds % 60 ))
 
-  if [[ -n ${cmd_base} ]]; then
-    info "Elapsed time (${cmd_base}): ${minutes}m${seconds}s"
-  else
-    info "Elapsed time: ${minutes}m${seconds}s"
-  fi
+	if [[ -n ${cmd_base} ]]; then
+		info "Elapsed time (${cmd_base}): ${minutes}m${seconds}s"
+	else
+		info "Elapsed time: ${minutes}m${seconds}s"
+	fi
 }
 
 command_completed() {
-  # Call print_elapsed_time regardless.
-  local run_time=$(_get_elapsed_seconds)
-  local cmd_base=$(basename "$0")
-  print_time_elapsed ${run_time} ${cmd_base}
+	# Call print_elapsed_time regardless.
+	local run_time=$(_get_elapsed_seconds)
+	local cmd_base=$(basename "$0")
+	print_time_elapsed ${run_time} ${cmd_base}
 }
 
 function check_in_chroot() {
@@ -301,16 +302,16 @@ function emerge_fw_handle() {
 
 function copy_ec_handle() {
 	if [ -f ~/trunk/firmware/${BOARD}/ec.bin ]; then
-		sudo rm -r ~/trunk/firmware/${BOARD}/ec.bin
-	fi
+        	sudo rm -r ~/trunk/firmware/${BOARD}/ec.bin
+    	fi
 
-	ls -al ~/trunk/firmware/${BOARD}
+    	ls -al ~/trunk/firmware/${BOARD}
     
-	if [ -f /build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin ]; then
-		sudo cp -r /build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin ~/trunk/firmware/${BOARD}
-	else
-		error "/build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin not exist!!!" 
-	fi
+    	if [ -f /build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin ]; then
+        	sudo cp -r /build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin ~/trunk/firmware/${BOARD}
+   	else
+        	error "/build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin not exist!!!"      
+    	fi
 
 	echo
 	ls -al ~/trunk/firmware/${BOARD}
@@ -318,30 +319,29 @@ function copy_ec_handle() {
 
 function copy_bios_handle() {
 	if [ -f ~/trunk/firmware/${BOARD}/image-${BOARD}.serial.bin ]; then
-		rm -r ~/trunk/firmware/${BOARD}/image-${BOARD}.serial.bin
+        	rm -r ~/trunk/firmware/${BOARD}/image-${BOARD}.serial.bin
     	fi
 
-    	if [ -f ~/trunk/firmware/${BOARD}/image-${BOARD}.bin ]; then
+	if [ -f ~/trunk/firmware/${BOARD}/image-${BOARD}.bin ]; then
         	rm -r ~/trunk/firmware/${BOARD}/image-${BOARD}.bin
-    	fi
+	fi
 
-    	ls -al ~/trunk/firmware/${BOARD}
+	ls -al ~/trunk/firmware/${BOARD}
 
 	if [ -f /build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin ]; then
 		cp -r /build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin  ~/trunk/firmware/${BOARD}
 		cp -r /build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin  ~/trunk/firmware/${BOARD}/bios.bin
-    	else
-		error "/build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin not exist!!!"
-    	fi
+	else
+		error "/build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin not exist!!!"      
+	fi
 
 	if [ -f /build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin ]; then
-        	cp -r /build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin  ~/trunk/firmware/${BOARD}
+		cp -r /build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin  ~/trunk/firmware/${BOARD}
     	else
-		error "/build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin not exist!!!"      
-    	fi
+        	error "/build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin not exist!!!"      
+	fi
 
-    	echo
-
+	echo
 	ls -al ~/trunk/firmware/${BOARD}
 }
 
@@ -349,28 +349,25 @@ function copy_fw_handle() {
 	rm -r ~/trunk/firmware/${BOARD}/*
 
 	if [ -f /build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin ]; then
-        cp -r /build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin ~/trunk/firmware/${BOARD}
-    else
-        error "/build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin not 
-exist!!!"      
-    fi
+        	cp -r /build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin ~/trunk/firmware/${BOARD}
+    	else
+        	error "/build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin not exist!!!"      
+    	fi
 
-    if [ -f /build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin ]; then
-        cp -r /build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin  ~/trunk/firmware/${BOARD}
-        cp -r /build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin  ~/trunk/firmware/${BOARD}/bios.bin
-    else
-        error "/build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin not 
-exist!!!"      
-    fi
+	if [ -f /build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin ]; then
+		cp -r /build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin  ~/trunk/firmware/${BOARD}
+		cp -r /build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin  ~/trunk/firmware/${BOARD}/bios.bin
+	else
+		error "/build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin not exist!!!"      
+	fi
 
-    if [ -f /build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin ]; then
-        cp -r /build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin  ~/trunk/firmware/${BOARD}
-    else
-        error "/build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin not 
-exist!!!"      
-    fi
+	if [ -f /build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin ]; then
+		cp -r /build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin  ~/trunk/firmware/${BOARD}
+	else
+ 		error "/build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin not exist!!!"
+	fi
 
-    ls -al ~/trunk/firmware/${BOARD}
+	ls -al ~/trunk/firmware/${BOARD}
 }
 
 
@@ -400,12 +397,12 @@ function flash_bios_handle() {
 	# different dut-control command
 	if [[ $(dut-control -p "${PORT}" servo_type) == *"servo_v4_with_servo"* ]]
 	then
-    	serial="$(dut-control -p "${PORT}" servo_micro_serialname | cut -d: -f2)"
+    		serial="$(dut-control -p "${PORT}" servo_micro_serialname | cut -d: -f2)"
 	elif [[ $(dut-control -p "${PORT}" servo_type) == *"servo_v4_with_ccd_cr50"* ]]
 	then
-    	serial="$(dut-control -p "${PORT}" ccd_serialname | cut -d: -f2)"
+    		serial="$(dut-control -p "${PORT}" ccd_serialname | cut -d: -f2)"
 	else
-	serial="$(dut-control -p "${PORT}" serialname | cut -d: -f2)"
+		serial="$(dut-control -p "${PORT}" serialname | cut -d: -f2)"
 	fi
 
 	if [[ $(dut-control -p "${PORT}" servo_type) == *"servo_micro"* ]]
@@ -477,18 +474,18 @@ function emerge_flash_fw_handle() {
 }
 
 function env_build_handle() {
-	 if  [ ! -d ~/trunk/firmware/${BOARD} ]; then
-        mkdir -p ~/trunk/firmware/${BOARD} ~/trunk/firmware/${BOARD}
-        mkdir -p ~/trunk/firmware/${BOARD} ~/trunk/firmware/${BOARD}_bak
-        mkdir -p ~/trunk/firmware/${BOARD} ~/trunk/firmware/${BOARD}_lb_bak
-    fi
+	if  [ ! -d ~/trunk/firmware/${BOARD} ]; then
+        	mkdir -p ~/trunk/firmware/${BOARD} ~/trunk/firmware/${BOARD}
+        	mkdir -p ~/trunk/firmware/${BOARD} ~/trunk/firmware/${BOARD}_bak
+        	mkdir -p ~/trunk/firmware/${BOARD} ~/trunk/firmware/${BOARD}_lb_bak
+	fi
 
-    if  [ ! -d ~/trunk/image/${BOARD} ]; then
-        mkdir -p ~/trunk/image/${current_board_id}_test_image
-        mkdir -p ~/trunk/image/${current_board_id}_recovery_image
-        mkdir -p ~/trunk/image/${current_board_id}_lb_image
-        mkdir -p ~/trunk/image/${current_board_id}_factory_image
-    fi
+	if  [ ! -d ~/trunk/image/${BOARD} ]; then
+        	mkdir -p ~/trunk/image/${current_board_id}_test_image
+        	mkdir -p ~/trunk/image/${current_board_id}_recovery_image
+        	mkdir -p ~/trunk/image/${current_board_id}_lb_image
+        	mkdir -p ~/trunk/image/${current_board_id}_factory_image
+	fi
 }
 
 function git_reset() {
@@ -557,3 +554,4 @@ function main() {
 }
 
 main "$@"
+
