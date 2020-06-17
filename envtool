@@ -36,7 +36,7 @@ declare COMMAND_LIST=(
 	flash_fw flash_fw_handle
 	emerge_flash_ec emerge_flash_ec_handle
 	emerge_flash_bios emerge_flash_bios_handle
-	emerge_flash_fw emerge_flash_handle
+	emerge_flash_fw emerge_flash_fw_handle
 	env_build env_build_handle
 	git_reset git_reset_handle
 )
@@ -220,7 +220,7 @@ function parse_params() {
 
 function emerge_ec_handle() {
 	if [ -e /build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin ]; then
-		sudo rm -f /build/${MOTHER_BOARD}/firmware/${BOARD}/*
+		sudo rm -rf /build/${MOTHER_BOARD}/firmware/${BOARD}/*
 	fi
 
 	case ${BOARD} in
@@ -253,21 +253,26 @@ function emerge_bios_handle() {
 		# stop all
 		cros_workon-${MOTHER_BOARD} --all stop
 		;;
+		volteer | malefor)
+		cros_workon-${MOTHER_BOARD} start intel-tglfsp coreboot depthcharge libpayload
+		FW_NAME=${BOARD} emerge-${MOTHER_BOARD} intel-tglfsp coreboot depthcharge libpayload chromeos-bootimage
+		cros_workon-${MOTHER_BOARD} --all stop
+		;;
 		*)
-		cros_workon-volteer start coreboot depthcharge libpayload
+		cros_workon-${MOTHER_BOARD} start coreboot depthcharge libpayload
 		FW_NAME=${BOARD} emerge-${MOTHER_BOARD} coreboot depthcharge libpayload chromeos-bootimage
-		cros_workon-kukui --all stop
+		cros_workon-${MOTHER_BOARD} --all stop
 		;;
 	esac
 }
 
 function emerge_fw_handle() {
 	if [ -e /build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin ]; then
-		rm -f /build/${MOTHER_BOARD}/firmware/${BOARD}/*
+		sudo rm -rf /build/${MOTHER_BOARD}/firmware/${BOARD}/*
 	fi
 
 	if [ -e /build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin ]; then
-		rm -f /build/${MOTHER_BOARD}/firmware/image-${BOARD}.*
+		sudo rm -f /build/${MOTHER_BOARD}/firmware/image-${BOARD}.*
 	fi
 
 	case ${BOARD} in
@@ -296,49 +301,48 @@ function emerge_fw_handle() {
 
 function copy_ec_handle() {
 	if [ -f ~/trunk/firmware/${BOARD}/ec.bin ]; then
-        rm -r ~/trunk/firmware/${BOARD}/ec.bin
-    fi
+		sudo rm -r ~/trunk/firmware/${BOARD}/ec.bin
+	fi
 
-    ls -al ~/trunk/firmware/${BOARD}
+	ls -al ~/trunk/firmware/${BOARD}
     
-    if [ -f /build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin ]; then
-        cp -r /build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin ~/trunk/firmware/${BOARD}
-    else
-        error "/build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin not 
-exist!!!"      
-    fi
+	if [ -f /build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin ]; then
+		sudo cp -r /build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin ~/trunk/firmware/${BOARD}
+	else
+		error "/build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin not exist!!!" 
+	fi
 
-    echo
-    ls -al ~/trunk/firmware/${BOARD}
+	echo
+	ls -al ~/trunk/firmware/${BOARD}
 }
 
 function copy_bios_handle() {
 	if [ -f ~/trunk/firmware/${BOARD}/image-${BOARD}.serial.bin ]; then
-        rm -r ~/trunk/firmware/${BOARD}/image-${BOARD}.serial.bin
-    fi
-    if [ -f ~/trunk/firmware/${BOARD}/image-${BOARD}.bin ]; then
-        rm -r ~/trunk/firmware/${BOARD}/image-${BOARD}.bin
-    fi
+		rm -r ~/trunk/firmware/${BOARD}/image-${BOARD}.serial.bin
+    	fi
 
-    ls -al ~/trunk/firmware/${BOARD}
-    
-    if [ -f /build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin ]; then
-        cp -r /build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin  ~/trunk/firmware/${BOARD}
-        cp -r /build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin  ~/trunk/firmware/${BOARD}/bios.bin
-    else
-        error "/build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin not 
-exist!!!"      
-    fi
+    	if [ -f ~/trunk/firmware/${BOARD}/image-${BOARD}.bin ]; then
+        	rm -r ~/trunk/firmware/${BOARD}/image-${BOARD}.bin
+    	fi
 
-    if [ -f /build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin ]; then
-        cp -r /build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin  ~/trunk/firmware/${BOARD}
-    else
-        error "/build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin not 
-exist!!!"      
-    fi
+    	ls -al ~/trunk/firmware/${BOARD}
 
-    echo
-    ls -al ~/trunk/firmware/${BOARD}
+	if [ -f /build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin ]; then
+		cp -r /build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin  ~/trunk/firmware/${BOARD}
+		cp -r /build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin  ~/trunk/firmware/${BOARD}/bios.bin
+    	else
+		error "/build/${MOTHER_BOARD}/firmware/image-${BOARD}.serial.bin not exist!!!"
+    	fi
+
+	if [ -f /build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin ]; then
+        	cp -r /build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin  ~/trunk/firmware/${BOARD}
+    	else
+		error "/build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin not exist!!!"      
+    	fi
+
+    	echo
+
+	ls -al ~/trunk/firmware/${BOARD}
 }
 
 function copy_fw_handle() {
@@ -392,7 +396,6 @@ function flash_bios_handle() {
 	fi
 
 	PORT=9999
-	serial="$(dut-control -p "${PORT}" serialname | cut -d: -f2)"
 	# if micro or ccd are run through v4, then getting the serial has a
 	# different dut-control command
 	if [[ $(dut-control -p "${PORT}" servo_type) == *"servo_v4_with_servo"* ]]
@@ -401,6 +404,8 @@ function flash_bios_handle() {
 	elif [[ $(dut-control -p "${PORT}" servo_type) == *"servo_v4_with_ccd_cr50"* ]]
 	then
     	serial="$(dut-control -p "${PORT}" ccd_serialname | cut -d: -f2)"
+	else
+	serial="$(dut-control -p "${PORT}" serialname | cut -d: -f2)"
 	fi
 
 	if [[ $(dut-control -p "${PORT}" servo_type) == *"servo_micro"* ]]
@@ -421,7 +426,6 @@ function flash_bios_handle() {
 	then
 		case ${BOARD} in
 		malefor | volteer)
-		echo "hx01...."
 		dut-control cpu_fw_spi:on
 		sudo flashrom -V -p ft2232_spi:type=servo-v2,serial="${serial}" -w ${bios_bin_path}
 		dut-control cpu_fw_spi:off
@@ -443,9 +447,9 @@ function flash_bios_handle() {
 }
 
 function flash_fw_handle() {
-	flash_ec_handle
-
 	flash_bios_handle
+	
+	flash_ec_handle
 }
 
 function emerge_flash_ec_handle() {
