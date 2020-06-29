@@ -2,8 +2,8 @@
 # Author: xiong.huang
 # First Version Time: 2020-05-27
 # Description:  1. built link
-#				2. emerge firmware
-#				3. flash firmware
+#		2. emerge firmware
+#		3. flash firmware
 
 # support boards list. If have new chrome project, remeber to add
 # mother project at first colum and other sub project following row.  
@@ -12,7 +12,7 @@ declare BOARD_LIST=(
 	'jacuzzi damu'
 	'volteer malefor'
 	'zork dalboz'
-	'dedede wheelie'
+	'waddledee wheelie boten'
 	'oak hana'
 	'coral'
 	'octopus phaser foob'
@@ -401,6 +401,9 @@ function flash_bios_handle() {
 	elif [[ $(dut-control -p "${PORT}" servo_type) == *"servo_v4_with_ccd_cr50"* ]]
 	then
     		serial="$(dut-control -p "${PORT}" ccd_serialname | cut -d: -f2)"
+	elif [[ $(dut-control -p "${PORT}" servo_type) == *"c2d2"* ]]
+	then
+		serial="$(dut-control -p "${PORT}" serialname | cut -d: -f2)"
 	else
 		serial="$(dut-control -p "${PORT}" serialname | cut -d: -f2)"
 	fi
@@ -431,6 +434,19 @@ function flash_bios_handle() {
    		dut-control -p "${PORT}" cold_reset:on spi2_buf_en:on spi2_vref:pp1800 spi2_buf_on_flex_en:on
 		sudo flashrom -V -p ft2232_spi:type=servo-v2,serial="${serial}" -w ${bios_bin_path}
 		dut-control -p "${PORT}" spi2_vref:off cold_reset:off spi2_buf_en:off spi2_buf_on_flex_en:off
+		;;
+		esac
+	elif [[ $(dut-control -p "${PORT}" servo_type) == *"c2d2"* ]]
+	then
+		case ${BOARD} in
+		waddledee | boten | wheelie)
+		cros flash-ap -b dedede --flashrom -i ${bios_bin_path} --debug
+		#dut-control -p "${PORT}" ‘ec_uart_cmd:apshutdown’ ‘sleep:5’ ‘ec_uart_cmd:gpioset en_pp3300_a 1’ ‘sleep:0.2’ 'ec_uart_cmd:gpioset ec_ap_rsmrst_l 0' 'ec_uart_cmd:gpioset ec_ap_rsmrst_l 0' 'ap_flash_select:on' 'spi2_vref:pp3300'
+		#sudo flashrom -p raiden_debug_spi:serial="${serial}" -w ${bios_bin_path}
+		#dut-control -p "${PORT}" 'spi2_vref:off' 'ap_flash_select:off'
+		;;
+
+		*)
 		;;
 		esac
 	else
