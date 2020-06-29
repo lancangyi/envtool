@@ -12,7 +12,7 @@ declare BOARD_LIST=(
 	'jacuzzi damu'
 	'volteer malefor'
 	'zork dalboz'
-	'waddledee wheelie boten'
+	'dedede waddledee wheelie boten'
 	'oak hana'
 	'coral'
 	'octopus phaser foob'
@@ -156,6 +156,14 @@ function check_servod_service ()
 	ps -fe | grep servod | grep -v grep
 	if [ $? -ne 0 ]; then
 		sudo servod -b ${MOTHER_BOARD}_npcx &
+		sleep 10
+	fi
+	;;
+	
+	dedede)
+	ps -fe | grep servod | grep -v grep
+	if [ $? -ne 0 ]; then
+		sudo servod -b waddledee &
 		sleep 10
 	fi
 	;;
