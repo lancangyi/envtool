@@ -234,9 +234,9 @@ function emerge_ec_handle() {
 
 	case ${BOARD} in
 		*)
-			cros_workon-${MOTHER_BOARD} start chromeos-ec
-			FW_NAME=${BOARD} emerge-${MOTHER_BOARD} chromeos-ec
-			cros_workon-${MOTHER_BOARD} stop chromeos-ec
+		cros_workon-${MOTHER_BOARD} start chromeos-ec
+		FW_NAME=${BOARD} emerge-${MOTHER_BOARD} chromeos-ec
+		cros_workon-${MOTHER_BOARD} stop chromeos-ec
 		;;
 	esac
 }
@@ -276,36 +276,9 @@ function emerge_bios_handle() {
 }
 
 function emerge_fw_handle() {
-	if [ -e /build/${MOTHER_BOARD}/firmware/${BOARD}/ec.bin ]; then
-		sudo rm -rf /build/${MOTHER_BOARD}/firmware/${BOARD}/*
-	fi
+	emerge_ec_handle
 
-	if [ -e /build/${MOTHER_BOARD}/firmware/image-${BOARD}.bin ]; then
-		sudo rm -f /build/${MOTHER_BOARD}/firmware/image-${BOARD}.*
-	fi
-
-	case ${BOARD} in
-		coral)
-		# build mrc first
-		emerge-${MOTHER_BOARD} chromeos-mrc --getbinpkg --binpkg-respect-use=n
-
-		# build the need files
-		emerge-${MOTHER_BOARD} coreboot-private-files coreboot-private-files-baseboard-${BOARD} nhlt-blobs
-
-		# start that we need build
-		cros_workon-${MOTHER_BOARD} start libpayload depthcharge coreboot 
-
-		# start building....
-		emerge-${MOTHER_BOARD} chromeos-seabios libpayload depthcharge coreboot chromeos-bootimage
-		# stop all
-		cros_workon-${MOTHER_BOARD} --all stop
-		;;
-		*)
-		cros_workon-volteer start chromeos-ec coreboot depthcharge libpayload
-		FW_NAME=${BOARD} emerge-${MOTHER_BOARD} chromeos-ec coreboot depthcharge libpayload chromeos-bootimage
-		cros_workon-kukui --all stop
-		;;
-	esac
+	emerge_bios_handle
 }
 
 function copy_ec_handle() {
