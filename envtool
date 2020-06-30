@@ -169,7 +169,7 @@ function check_servod_service ()
 	;;
 
 	*)
-	ps -fe |grep servod | grep -v grep
+	ps -fe | grep servod | grep -v grep
 	if [ $? -ne 0 ]; then
 		sudo servod -b ${MOTHER_BOARD} &
 		sleep 10
